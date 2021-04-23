@@ -31,8 +31,9 @@ public class RobotControllerAgent : Agent
     private float beginDistance;
     private float prevBest;
 
-    private float baseAngle;
-    private const float stepPenalty = -0.0001f;
+    private float beginAngle;
+    private const float stepPenalty = -0.001f;
+
           
        
     void Start()
@@ -83,19 +84,21 @@ public class RobotControllerAgent : Agent
 
         if(inFrontOfComponent)
         {
-            nearestComponent.transform.position = transform.position + new Vector3(Random.Range(0.3f, 0.7f), Random.Range(0.1f, 0.3f), Random.Range(0.3f, .7f));
+            //nearestComponent.transform.position = transform.position + new Vector3(Random.Range(0.3f, 0.6f), Random.Range(0.1f, 0.3f), Random.Range(0.3f, 0.6f));
+            nearestComponent.transform.position = transform.position + new Vector3(Random.Range(0.3f, 0.55f), Random.Range(0.1f, 0.3f), Random.Range(0.3f, 0.55f));
         }
         else
         {
-            nearestComponent.transform.position = endEffector.transform.TransformPoint(Vector3.zero) + new Vector3(Random.Range(0.1f, 0.2f), Random.Range(0.1f, 0.2f), Random.Range(0.1f, 0.2f));
+            //nearestComponent.transform.position = endEffector.transform.TransformPoint(Vector3.zero) + new Vector3(Random.Range(0.1f, 0.2f), Random.Range(0f, -0.1f), Random.Range(0.1f, 0.2f));
+            nearestComponent.transform.position = endEffector.transform.TransformPoint(Vector3.zero) + new Vector3(Random.Range(0.01f, 0.15f), Random.Range(0.01f, 0.15f), Random.Range(0.01f, 0.15f));
         }
 
         beginDistance = Vector3.Distance(endEffector.transform.TransformPoint(Vector3.zero), nearestComponent.transform.position);
         prevBest = beginDistance;
 
-        baseAngle = Mathf.Atan2(transform.position.x - nearestComponent.transform.position.x, transform.position.z - nearestComponent.transform.position.z) * Mathf.Deg2Rad;
-        if (baseAngle < 0)
-            baseAngle += 360f;
+
+        beginAngle = Vector3.Angle(nearestComponent.transform.up.normalized, endEffector.transform.up.normalized)/180f;
+        
     }
 
 
@@ -113,7 +116,8 @@ public class RobotControllerAgent : Agent
         Vector3 toComponent = nearestComponent.transform.position - endEffector.transform.TransformPoint(Vector3.zero);
         sensor.AddObservation(toComponent.normalized);      //3 Observations
 
-        float angleBet = Vector3.Angle(nearestComponent.transform.up, endEffector.transform.up);
+        //float angleBet = Vector3.Angle(nearestComponent.transform.up.normalized, endEffector.transform.up.normalized) / 180f;
+        float angleBet = Vector3.Dot(nearestComponent.transform.up.normalized, endEffector.transform.up.normalized); 
         sensor.AddObservation(angleBet); //1 Observation
 
         sensor.AddObservation(Vector3.Distance(nearestComponent.transform.position, endEffector.transform.TransformPoint(Vector3.zero)));       //1 Observation
@@ -139,6 +143,7 @@ public class RobotControllerAgent : Agent
             armAxes[4].transform.localRotation = Quaternion.AngleAxis(angles[4] * 180f, armAxes[4].GetComponent<Axis>().rotationAxisY);
 
             float distance = Vector3.Distance(endEffector.transform.TransformPoint(Vector3.zero), nearestComponent.transform.position);
+            
             float diff = beginDistance - distance;
 
             if(distance > prevBest)
@@ -151,11 +156,17 @@ public class RobotControllerAgent : Agent
                 AddReward(diff);
                 prevBest = distance;
             }
+            
+            //float distReward = (beginDistance - distance) / beginDistance;
+            //AddReward(distReward);
 
             //Reward for angle between component and gripper
-            float angleReward = Mathf.Clamp01(Vector3.Dot(nearestComponent.transform.up.normalized, endEffector.transform.up.normalized));
-            AddReward(angleReward * 0.01f);
-
+            float angleReward = Vector3.Dot(nearestComponent.transform.up.normalized, endEffector.transform.up.normalized);
+            AddReward(angleReward);
+            //float angle = Vector3.Angle(nearestComponent.transform.up.normalized, endEffector.transform.up.normalized) / 180f;
+            //float angleReward = (beginAngle - angle) / beginAngle;
+           //AddReward(angleReward);
+            
             //Penalty for evrty time step passed
             AddReward(stepPenalty);
         }
@@ -182,15 +193,21 @@ public class RobotControllerAgent : Agent
     {
         if(other.transform.CompareTag("Component"))
         {
-            float successReward = 0.5f;
-            float bonus = Mathf.Clamp01(Vector3.Dot(nearestComponent.transform.up.normalized, endEffector.transform.up.normalized));
+            float successReward = 1f;
+            float bonus = Vector3.Dot(nearestComponent.transform.up.normalized, endEffector.transform.up.normalized);
             float reward = successReward + bonus;
 
-            if (float.IsInfinity(reward) || float.IsNaN(reward))
-                return;
+            if (bonus >= 0.99)
+                reward = 10f;
+                //AddReward(100f);
+
+             if (float.IsInfinity(reward) || float.IsNaN(reward))
+               return;
 
             Debug.LogWarning("End Effector Reached Nearest Component. Reward = " + reward);
             AddReward(reward);
+
+
 
             //Update nearest component location again
             UpdateNearestComponent();
